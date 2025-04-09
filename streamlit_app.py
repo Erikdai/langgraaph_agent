@@ -5,8 +5,11 @@ import os
 import requests
 import re
 
-os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"] if "GROQ_API_KEY" in st.secrets else os.getenv("GROQ_API_KEY")
-
+if "GROQ_API_KEY" in st.secrets:
+    os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+elif os.getenv("GROQ_API_KEY") is not None:
+    os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
+    
 class State(TypedDict):
     user_input: str
     parsed_info: Optional[dict]
