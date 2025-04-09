@@ -1,19 +1,15 @@
+import streamlit as st
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Optional
 import os
 import requests
-import matplotlib.pyplot as plt
-import uuid
 
-os.environ["GROQ_API_KEY"] = "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"
+os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"] if "GROQ_API_KEY" in st.secrets else os.getenv("GROQ_API_KEY")
 
 class State(TypedDict):
     user_input: str
     parsed_info: Optional[dict]
-    search_result: Optional[str]
     report: Optional[str]
-    history: Optional[str]
-    chart_path: Optional[str]
 
 def call_groq_llm(prompt_messages):
     headers = {
@@ -57,47 +53,13 @@ def recognition_user_input(state: State) -> dict:
     except:
         return {"parsed_info": {"国家": "未知", "行业": "未知", "备注": content}}
 
-def web_search_agent(state: State) -> dict:
-    parsed = state["parsed_info"]
-    keyword = f"{parsed.get('国家', '')} {parsed.get('行业', '')} 出海政策 市场趋势"
-    headers = {"Authorization": "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", "Content-Type": "application/json"}
-    try:
-        response = requests.post(
-            "https://api.tavily.com/search",
-            headers=headers,
-            json={"query": keyword, "include_raw_content": True}
-        )
-        print("[Tavily 调试] 请求关键词：", keyword)
-        print("[Tavily 调试] 返回状态码：", response.status_code)
-        print("[Tavily 调试] 返回内容：", response.text)
-
-        if response.ok and response.json().get("results"):
-            content_summary = response.json()['results'][0]['content']
-        else:
-            content_summary = "未能完成联网搜索，请稍后再试。"
-    except Exception as e:
-        print("[Tavily 异常]", e)
-        content_summary = f"[模拟内容] {parsed.get('国家')} 市场的 {parsed.get('行业')} 行业目前出海活跃，有政府支持、电商平台扩展等趋势。"
-
-    analysis_prompt = [
-        {"role": "system", "content": (
-            "你是一个出海市场分析助手，请根据以下网页内容，总结适用于该国家与行业的市场趋势、合规重点或风险警示，控制在200字以内。\n\n"
-            f"网页内容：{content_summary}"
-        )}
-    ]
-    summary = call_groq_llm(analysis_prompt)
-    return {"search_result": summary}
-
-
 def report_generator(state: State) -> dict:
     parsed = state["parsed_info"]
-    insight = state["search_result"]
-    chart = state.get("chart_path", "(图表未生成)")
     prompt = [
         {"role": "system", "content": (
             f"请基于以下信息撰写一份出海建议报告，结构包含：\n"
             f"1. 企业背景：{parsed}\n"
-            f"2. 市场分析：{insight}\n"
+            "2. 市场分析：请根据该企业背景推测其在目标市场可能面临的机会与挑战。\n"
             "要求内容连贯，结构清晰，语言专业，不少于150字，使用中文撰写。"
         )}
     ]
@@ -105,20 +67,26 @@ def report_generator(state: State) -> dict:
 
 graph = StateGraph(State)
 graph.add_node("parse", recognition_user_input)
-graph.add_node("search", web_search_agent)
 graph.add_node("report_gen", report_generator)
 
 graph.set_entry_point("parse")
-graph.add_edge("parse", "search")
-graph.add_edge("search", "report_gen")
+graph.add_edge("parse", "report_gen")
 graph.add_edge("report_gen", END)
 
 app = graph.compile()
 
+def main():
+    st.set_page_config(page_title="出海顾问助手", page_icon="🌍")
+    st.title("🌍 企业出海智能顾问")
+    st.write("请输入您的企业出海意图，我将生成详细建议报告。")
+
+    user_input = st.text_area("请输入出海相关信息：", height=150)
+    if st.button("生成出海建议") and user_input:
+        with st.spinner("正在分析并生成报告..."):
+            result = app.invoke({"user_input": user_input})
+        st.success("✅ 出海建议已生成")
+        st.subheader("📄 出海建议报告")
+        st.write(result["report"])
+
 if __name__ == "__main__":
-    result = app.invoke({
-        "user_input": "我们是一家从事建材出口的公司，考虑2025年拓展中东市场，请给我出海建议。"
-    })
-    print("=== 出海建议报告 ===")
-    print(result["report"])
-    print(result.keys())
+    main()
