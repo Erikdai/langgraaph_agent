@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, END
 from typing import TypedDict, Optional
 import os
 import requests
+import re
 
 os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"] if "GROQ_API_KEY" in st.secrets else os.getenv("GROQ_API_KEY")
 
@@ -60,10 +61,15 @@ def report_generator(state: State) -> dict:
             f"请基于以下信息撰写一份出海建议报告，结构包含：\n"
             f"1. 企业背景：{parsed}\n"
             "2. 市场分析：请根据该企业背景推测其在目标市场可能面临的机会与挑战。\n"
-            "要求内容连贯，结构清晰，语言专业，不少于150字，使用中文撰写。"
+            "要求内容连贯，结构清晰，语言专业，不少于150字，使用中文撰写。并在回答中使用 <think>你的思考过程</think> 标签包装推理内容。"
         )}
     ]
-    return {"report": call_groq_llm(prompt)}
+    full_output = call_groq_llm(prompt)
+    # 抽取推理过程
+    match = re.search(r"<think>(.*?)</think>", full_output, re.DOTALL)
+    debug_info = match.group(1).strip() if match else "（无推理过程标注）"
+    cleaned_output = re.sub(r"<think>.*?</think>", "", full_output, flags=re.DOTALL).strip()
+    return {"report": cleaned_output, "debug": debug_info}
 
 graph = StateGraph(State)
 graph.add_node("parse", recognition_user_input)
@@ -86,9 +92,8 @@ def main():
 
     with st.sidebar:
         if st.button("🧹 清空对话"):
-            st.session_state.chat_history = []
-            st.session_state.full_trace = []
-            st.experimental_rerun()
+            st.session_state.clear()
+            st.rerun()
 
     for i, (role, msg, trace) in enumerate(st.session_state.full_trace):
         with st.chat_message(role):
@@ -105,7 +110,7 @@ def main():
         with st.spinner("正在生成出海建议…"):
             result = app.invoke({"user_input": user_prompt})
             report = result["report"]
-            debug = result.get("debug", "无调试信息")
+            debug = result.get("debug", "无推理内容")
 
         st.chat_message("assistant").markdown(report)
         st.session_state.full_trace.append(("assistant", report, debug))
