@@ -77,16 +77,28 @@ app = graph.compile()
 
 def main():
     st.set_page_config(page_title="出海顾问助手", page_icon="🌍")
-    st.title("🌍 企业出海智能顾问")
-    st.write("请输入您的企业出海意图，我将生成详细建议报告。")
+    st.title("🌍 企业出海智能对话助手")
 
-    user_input = st.text_area("请输入出海相关信息：", height=150)
-    if st.button("生成出海建议") and user_input:
-        with st.spinner("正在分析并生成报告..."):
-            result = app.invoke({"user_input": user_input})
-        st.success("✅ 出海建议已生成")
-        st.subheader("📄 出海建议报告")
-        st.write(result["report"])
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    for role, msg in st.session_state.chat_history:
+        if role == "user":
+            st.chat_message("user").markdown(msg)
+        else:
+            st.chat_message("assistant").markdown(msg)
+
+    user_prompt = st.chat_input("请输入您的企业出海背景或提问…")
+    if user_prompt:
+        st.chat_message("user").markdown(user_prompt)
+        st.session_state.chat_history.append(("user", user_prompt))
+
+        with st.spinner("正在生成出海建议…"):
+            result = app.invoke({"user_input": user_prompt})
+            report = result["report"]
+
+        st.chat_message("assistant").markdown(report)
+        st.session_state.chat_history.append(("assistant", report))
 
 if __name__ == "__main__":
     main()
