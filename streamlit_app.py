@@ -49,9 +49,9 @@ def recognition_user_input(state: State) -> dict:
         if isinstance(parsed, dict) and '国家' in parsed and '行业' in parsed:
             return {"parsed_info": parsed}
         else:
-            return {"parsed_info": {"国家": "未知", "行业": "未知", "备注": content}}
+            return {"parsed_info": {"国家": "未知", "行业": "未知", "备注": content}, "debug": content}
     except:
-        return {"parsed_info": {"国家": "未知", "行业": "未知", "备注": content}}
+        return {"parsed_info": {"国家": "未知", "行业": "未知", "备注": content}, "debug": content}
 
 def report_generator(state: State) -> dict:
     parsed = state["parsed_info"]
@@ -81,24 +81,34 @@ def main():
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+    if "full_trace" not in st.session_state:
+        st.session_state.full_trace = []
 
-    for role, msg in st.session_state.chat_history:
-        if role == "user":
-            st.chat_message("user").markdown(msg)
-        else:
-            st.chat_message("assistant").markdown(msg)
+    with st.sidebar:
+        if st.button("🧹 清空对话"):
+            st.session_state.chat_history = []
+            st.session_state.full_trace = []
+            st.experimental_rerun()
+
+    for i, (role, msg, trace) in enumerate(st.session_state.full_trace):
+        with st.chat_message(role):
+            st.markdown(msg)
+            if role == "assistant" and trace:
+                with st.expander("推理过程展开", expanded=False):
+                    st.code(trace)
 
     user_prompt = st.chat_input("请输入您的企业出海背景或提问…")
     if user_prompt:
         st.chat_message("user").markdown(user_prompt)
-        st.session_state.chat_history.append(("user", user_prompt))
+        st.session_state.full_trace.append(("user", user_prompt, None))
 
         with st.spinner("正在生成出海建议…"):
             result = app.invoke({"user_input": user_prompt})
             report = result["report"]
+            debug = result.get("debug", "无调试信息")
 
         st.chat_message("assistant").markdown(report)
-        st.session_state.chat_history.append(("assistant", report))
+        st.session_state.full_trace.append(("assistant", report, debug))
 
 if __name__ == "__main__":
     main()
